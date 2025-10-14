@@ -1,0 +1,97 @@
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#007aff">
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>タスク履歴</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 20px; background-color: #f0f2f5; }
+        .container { max-width: 800px; margin: 0 auto; background-color: #fff; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { text-align: center; }
+        .nav-links { text-align: center; margin-bottom: 30px; }
+        .nav-links a { text-decoration: none; color: #fff; background-color: #007aff; padding: 10px 20px; border-radius: 8px; }
+        .chart-container { margin-bottom: 40px; }
+        h2 { border-bottom: 2px solid #eee; padding-bottom: 10px; }
+    </style>
+</head>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js');
+  });
+}
+</script>
+<body>
+    <div class="container">
+        <h1>タスク履歴</h1>
+        <div class="nav-links">
+            <a href="timer.html">タイマーに戻る</a>
+        </div>
+        <div id="charts-area"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const history = JSON.parse(localStorage.getItem('taskHistory')) || [];
+            const tasks = JSON.parse(localStorage.getItem('masterTasks')) || [];
+            const chartsArea = document.getElementById('charts-area');
+
+            if (tasks.length === 0) {
+                chartsArea.innerHTML = '<p>まだタスクが登録されていません。「タイマーに戻る」からタスクを登録してください。</p>';
+                return;
+            }
+
+            let chartRendered = false;
+            tasks.forEach(task => {
+                const taskHistory = history.filter(h => h.taskId === task.id);
+                if (taskHistory.length === 0) return;
+
+                chartRendered = true;
+                const chartContainer = document.createElement('div');
+                chartContainer.className = 'chart-container';
+                chartContainer.innerHTML = `<h2>${task.name}</h2><canvas id="chart-${task.id}"></canvas>`;
+                chartsArea.appendChild(chartContainer);
+
+                const labels = taskHistory.map(h => new Date(h.date).toLocaleDateString('ja-JP'));
+                const actualData = taskHistory.map(h => h.actualDuration);
+                const plannedData = taskHistory.map(h => h.plannedDuration);
+
+                new Chart(document.getElementById(`chart-${task.id}`), {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: '実際にかかった時間 (分)',
+                                data: actualData,
+                                borderColor: '#007aff',
+                                backgroundColor: 'rgba(0, 122, 255, 0.1)',
+                                fill: true,
+                                tension: 0.1
+                            },
+                            {
+                                label: '予定時間 (分)',
+                                data: plannedData,
+                                borderColor: '#ff9500',
+                                borderDash: [5, 5],
+                                fill: false
+                            }
+                        ]
+                    },
+                    options: {
+                        scales: { y: { beginAtZero: true, title: { display: true, text: '時間 (分)' } } },
+                        responsive: true
+                    }
+                });
+            });
+
+            if (!chartRendered) {
+                chartsArea.innerHTML = '<p>まだ実行履歴がありません。タイマーページでタスクを実行・終了すると、ここにグラフが表示されます。</p>';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,258 @@
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#007aff">
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>モーニングタイマー</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; margin: 0; padding: 50px 20px; background-color: #f0f2f5; color: #333; }
+        .main-container { display: flex; flex-wrap: wrap; gap: 40px; justify-content: center; width: 100%; max-width: 1200px; }
+        .master-task-container, .task-container, .timer-container { background-color: #ffffff; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; flex: 1; min-width: 350px; display: flex; flex-direction: column; }
+        h1 { margin-top: 0; font-size: 1.8em; }
+        a { color: #007aff; text-decoration: none; }
+        .master-task-list { margin-bottom: 15px; }
+        .master-task-list button { display: block; width: 100%; padding: 12px; margin-bottom: 10px; font-size: 1em; cursor: pointer; border: 1px solid #007aff; background-color: #fff; color: #007aff; border-radius: 8px; transition: background-color 0.2s, color 0.2s; }
+        .master-task-list button:hover { background-color: #007aff; color: #fff; }
+        .task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .task-list { list-style: none; padding: 0; text-align: left; }
+        .task-list li { background-color: #f9f9f9; padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 5px solid transparent; transition: all 0.3s; }
+        .task-list li.running { background-color: #eef7ff; border-left-color: #007aff; }
+        .task-info { display: flex; justify-content: space-between; align-items: center; }
+        .task-name { font-weight: bold; font-size: 1.1em; }
+        .task-duration { color: #888; }
+        .task-controls { margin-top: 10px; text-align: right; }
+        .task-controls button { padding: 5px 15px; font-size: 0.9em; cursor: pointer; border: none; border-radius: 5px; color: white; }
+        .start-btn { background-color: #007aff; }
+        .end-btn { background-color: #ff9500; }
+        .task-timer-display { background-color: #e9e9eb; border-radius: 5px; padding: 10px; margin-top: 12px; text-align: center; font-size: 1.1em; font-weight: bold; }
+        .task-timer-display .overtime { color: #ff3b30; }
+        .task-result { font-size: 0.9em; margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; }
+        .result-diff-plus { color: #ff3b30; }
+        .result-diff-minus { color: #34c759; }
+        #departure-display { font-size: 3.5em; font-weight: 300; margin: 20px 0; color: #007aff; }
+        #wakeUpBtn { background-color: #34c759; width: 100%; padding: 12px; font-size: 1.1em; cursor: pointer; border: none; border-radius: 8px; color: #fff; margin-top: 10px; }
+    </style>
+</head>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js');
+  });
+}
+</script>
+<body>
+    <div class="main-container">
+        <div class="master-task-container">
+            <h1>タスクを選ぶ</h1>
+            <div id="master-task-list" class="master-task-list"></div>
+            <a href="tasks.html">新しいタスクを登録・編集</a>
+        </div>
+        <div class="task-container">
+            <div class="task-header">
+                <h1>今日のタスク</h1>
+                <a href="history.html">履歴グラフ</a>
+            </div>
+            <ul id="today-task-list" class="task-list"></ul>
+        </div>
+        <div class="timer-container">
+            <h1>出発まで</h1>
+            <div id="departure-display">00:00:00</div>
+            <div class="input-group" style="display:flex; justify-content:center; gap:10px; align-items:center;">
+                <label for="departureTime">出発時刻:</label>
+                <input type="time" id="departureTime" style="padding:8px; border-radius: 8px; border: 1px solid #ccc;">
+            </div>
+            <button id="wakeUpBtn">カウントダウン開始</button>
+        </div>
+    </div>
+
+    <script>
+        const masterTaskListDiv = document.getElementById('master-task-list');
+        const todayTaskListUl = document.getElementById('today-task-list');
+        const departureDisplay = document.getElementById('departure-display');
+        const departureTimeInput = document.getElementById('departureTime');
+        const wakeUpBtn = document.getElementById('wakeUpBtn');
+
+        let masterTasks = [];
+        let todayTasks = [];
+        let taskHistory = [];
+        
+        function renderMasterTasks() {
+            masterTaskListDiv.innerHTML = '';
+            masterTasks.forEach(task => {
+                if (todayTasks.some(t => t.id === task.id)) return;
+                const button = document.createElement('button');
+                button.textContent = `${task.name} (${task.defaultDuration}分)`;
+                button.dataset.id = task.id;
+                masterTaskListDiv.appendChild(button);
+            });
+        }
+
+        function renderTodayTasks() {
+            todayTaskListUl.innerHTML = '';
+            todayTasks.forEach((task, index) => {
+                const li = document.createElement('li');
+                if (task.status === 'running') li.classList.add('running');
+
+                let contentHTML = `
+                    <div class="task-info">
+                        <span class="task-name">${task.name}</span>
+                        <span class="task-duration">予定: ${task.duration}分</span>
+                    </div>`;
+                if (task.status === 'running') {
+                    contentHTML += `<div class="task-timer-display" data-index="${index}">計測中...</div>`;
+                }
+                contentHTML += '<div class="task-controls">';
+                if (task.status === 'pending') {
+                    contentHTML += `<button class="start-btn" data-index="${index}">開始</button>`;
+                } else if (task.status === 'running') {
+                    contentHTML += `<button class="end-btn" data-index="${index}">終了</button>`;
+                }
+                contentHTML += '</div>';
+                if (task.status === 'completed') {
+                    const diff = task.actualDuration - task.duration;
+                    const diffText = diff > 0 ? `<span class="result-diff-plus">(+${diff.toFixed(1)}分)</span>`
+                                   : diff < 0 ? `<span class="result-diff-minus">(${diff.toFixed(1)}分)</span>`
+                                   : `(予定通り)`;
+                    contentHTML += `<div class="task-result">実績: ${task.actualDuration.toFixed(1)}分 ${diffText}</div>`;
+                }
+                li.innerHTML = contentHTML;
+                todayTaskListUl.appendChild(li);
+            });
+            renderMasterTasks();
+        }
+
+        function updateRealtimeTimers() {
+            const runningTaskIndex = todayTasks.findIndex(t => t.status === 'running');
+            if (runningTaskIndex === -1) return;
+            
+            const task = todayTasks[runningTaskIndex];
+            const timerDisplay = document.querySelector(`.task-timer-display[data-index="${runningTaskIndex}"]`);
+            if (!timerDisplay) return;
+
+            const elapsedSeconds = Math.floor((Date.now() - task.startTime) / 1000);
+            const plannedSeconds = task.duration * 60;
+            const diffSeconds = plannedSeconds - elapsedSeconds;
+
+            const statusText = diffSeconds >= 0 
+                ? `残り ${formatSeconds(diffSeconds)}` 
+                : `<span class="overtime">超過 ${formatSeconds(Math.abs(diffSeconds))}</span>`;
+            
+            timerDisplay.innerHTML = `経過 ${formatSeconds(elapsedSeconds)} | ${statusText}`;
+        }
+        
+        function addTodayTask(event) {
+            if (event.target.tagName !== 'BUTTON') return;
+            const taskId = parseInt(event.target.dataset.id);
+            const taskToAdd = masterTasks.find(t => t.id === taskId);
+            
+            todayTasks.push({
+                id: taskToAdd.id,
+                name: taskToAdd.name,
+                duration: taskToAdd.defaultDuration,
+                status: 'pending',
+                startTime: null,
+                actualDuration: null
+            });
+            renderTodayTasks();
+        }
+
+        function handleTaskAction(event) {
+            const target = event.target;
+            const index = target.dataset.index;
+            if (index === undefined) return;
+            
+            const task = todayTasks[index];
+
+            if (target.classList.contains('start-btn')) {
+                if (todayTasks.some(t => t.status === 'running')) {
+                    alert('実行中のタスクがあります。先に終了してください。');
+                    return;
+                }
+                task.status = 'running';
+                task.startTime = Date.now();
+            } else if (target.classList.contains('end-btn')) {
+                task.status = 'completed';
+                task.actualDuration = (Date.now() - task.startTime) / (1000 * 60);
+                saveHistory(task); // ★★★ ここで履歴を保存します
+            }
+            renderTodayTasks(); // ★★★ アクション後に必ず再描画します
+        }
+
+        function saveHistory(completedTask) {
+            const newEntry = {
+                date: new Date().toISOString().split('T')[0],
+                taskId: completedTask.id,
+                task: completedTask.name,
+                plannedDuration: completedTask.duration,
+                // ▼▼▼ ここのタイプミスを修正しました ▼▼▼
+                actualDuration: completedTask.actualDuration 
+            };
+            const existingIndex = taskHistory.findIndex(h => h.date === newEntry.date && h.taskId === newEntry.taskId);
+            if (existingIndex > -1) {
+                taskHistory[existingIndex] = newEntry;
+            } else {
+                taskHistory.push(newEntry);
+            }
+            localStorage.setItem('taskHistory', JSON.stringify(taskHistory));
+        }
+        
+        function formatSeconds(s) {
+            const minutes = Math.floor(s / 60);
+            const seconds = s % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function initializeApp() {
+            masterTasks = JSON.parse(localStorage.getItem('masterTasks')) || [];
+            taskHistory = JSON.parse(localStorage.getItem('taskHistory')) || [];
+            
+            renderTodayTasks();
+            
+            masterTaskListDiv.addEventListener('click', addTodayTask);
+            todayTaskListUl.addEventListener('click', handleTaskAction);
+            wakeUpBtn.addEventListener('click', startDepartureCountdown);
+            
+            setInterval(updateRealtimeTimers, 1000);
+        }
+
+        let departureCountdownInterval = null;
+        function startDepartureCountdown() {
+            if (departureCountdownInterval) clearInterval(departureCountdownInterval);
+            const timeValue = departureTimeInput.value;
+            if (!timeValue) {
+                alert('出発時刻を入力してください。');
+                return;
+            }
+            const now = new Date();
+            const departure = new Date();
+            const [hours, minutes] = timeValue.split(':');
+            departure.setHours(hours, minutes, 0, 0);
+            if (departure < now) {
+                departure.setDate(departure.getDate() + 1);
+            }
+            let remainingSeconds = Math.floor((departure - now) / 1000);
+            
+            function formatCountdown(s) {
+                if(s < 0) s = 0;
+                const h = Math.floor(s / 3600);
+                const m = Math.floor((s % 3600) / 60);
+                const sec = s % 60;
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+            }
+            departureDisplay.textContent = formatCountdown(remainingSeconds);
+            departureCountdownInterval = setInterval(() => {
+                remainingSeconds--;
+                departureDisplay.textContent = formatCountdown(remainingSeconds);
+                if (remainingSeconds <= 0) {
+                    clearInterval(departureCountdownInterval);
+                    departureDisplay.textContent = "出発！";
+                }
+            }, 1000);
+        }
+
+        initializeApp();
+    </script>
+</body>
+</html>

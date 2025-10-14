@@ -1,0 +1,104 @@
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#007aff">
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マスタタスク管理</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; display: flex; justify-content: center; padding-top: 50px; background-color: #f0f2f5; }
+        .container { background-color: #ffffff; padding: 40px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 90%; max-width: 600px; }
+        h1 { text-align: center; margin-top: 0; }
+        .input-form { display: flex; gap: 10px; margin-bottom: 20px; }
+        .input-form input { padding: 10px; font-size: 1em; border: 1px solid #ccc; border-radius: 8px; }
+        .input-form input[type="text"] { flex-grow: 1; }
+        .input-form input[type="number"] { width: 80px; }
+        .input-form button { padding: 10px 20px; font-size: 1em; cursor: pointer; border: none; border-radius: 8px; background-color: #007aff; color: white; }
+        ul { list-style: none; padding: 0; }
+        li { background-color: #f9f9f9; padding: 15px; margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .delete-btn { background-color: #ff3b30; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
+        .nav-link { display: block; width: 100%; text-align: center; margin-top: 30px; padding: 15px; font-size: 1.2em; text-decoration: none; color: white; background-color: #34c759; border-radius: 8px; }
+    </style>
+</head>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js');
+  });
+}
+</script>
+<body>
+    <div class="container">
+        <h1>マスタタスクを管理</h1>
+        <div class="input-form">
+            <input type="text" id="taskName" placeholder="タスク名">
+            <input type="number" id="taskDuration" placeholder="時間(分)" min="1">
+            <button id="addTaskBtn">登録</button>
+        </div>
+        <ul id="masterTaskList"></ul>
+        <a href="timer.html" class="nav-link">タイマーページへ</a>
+    </div>
+
+    <script>
+        const taskNameInput = document.getElementById('taskName');
+        const taskDurationInput = document.getElementById('taskDuration');
+        const addTaskBtn = document.getElementById('addTaskBtn');
+        const masterTaskListUl = document.getElementById('masterTaskList');
+
+        let masterTasks = JSON.parse(localStorage.getItem('masterTasks')) || [];
+
+        function renderMasterTasks() {
+            masterTaskListUl.innerHTML = '';
+            masterTasks.forEach(task => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span>${task.name} (予定: ${task.defaultDuration} 分)</span>
+                    <button class="delete-btn" data-id="${task.id}">削除</button>
+                `;
+                masterTaskListUl.appendChild(li);
+            });
+        }
+
+        function addTask() {
+            const name = taskNameInput.value.trim();
+            const duration = parseInt(taskDurationInput.value);
+
+            if (name && duration > 0) {
+                const newTask = {
+                    id: Date.now(),
+                    name: name,
+                    defaultDuration: duration
+                };
+                masterTasks.push(newTask);
+                saveMasterTasks();
+                renderMasterTasks();
+                taskNameInput.value = '';
+                taskDurationInput.value = '';
+            } else {
+                alert('タスク名と時間を正しく入力してください。');
+            }
+        }
+
+        function deleteTask(id) {
+            masterTasks = masterTasks.filter(task => task.id !== id);
+            saveMasterTasks();
+            renderMasterTasks();
+        }
+
+        function saveMasterTasks() {
+            localStorage.setItem('masterTasks', JSON.stringify(masterTasks));
+        }
+
+        addTaskBtn.addEventListener('click', addTask);
+        masterTaskListUl.addEventListener('click', function(event) {
+            if (event.target.classList.contains('delete-btn')) {
+                const id = parseInt(event.target.getAttribute('data-id'));
+                deleteTask(id);
+            }
+        });
+
+        renderMasterTasks();
+    </script>
+</body>
+</html>
