@@ -254,5 +254,12 @@ if ('serviceWorker' in navigator) {
 
         initializeApp();
     </script>
+    <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js'); // 先頭スラッシュなし
+      });
+    }
+    </script>
 </body>
 </html>
